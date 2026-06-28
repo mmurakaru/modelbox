@@ -13,9 +13,12 @@ final class ModelStore {
 
     var searchQuery: String = ""
 
+    private(set) var runtimeInfo: [String: RuntimeInfo] = [:]
+
     private var scanners: [any ModelScanner] = []
     private var watchers: [DirectoryWatcher] = []
     private let dedup = DedupDetector()
+    private let runtime = RuntimeMonitor()
     private var didStart = false
 
     /// Total space freeable by removing all-but-one of each duplicate group.
@@ -65,7 +68,34 @@ final class ModelStore {
                 self?.lastScan = Date()
                 self?.isScanning = false
                 self?.duplicateGroups = []  // stale once the inventory changes
+                self?.refreshRuntime()
             }
+        }
+    }
+
+    /// Refreshes which models are resident in memory ("warm"). Cheap; safe to call on refresh/appear.
+    func refreshRuntime() {
+        let snapshot = models
+        Task {
+            let info = await runtime.snapshot(for: snapshot)
+            runtimeInfo = info
+        }
+    }
+
+    func isWarm(_ model: LocalModel) -> Bool {
+        runtimeInfo[model.id] != nil
+    }
+
+    func stopTarget(for model: LocalModel) -> StopTarget? {
+        runtimeInfo[model.id]?.stopTarget
+    }
+
+    /// Stops a cleanly-stoppable resident model, then refreshes runtime state.
+    func stop(_ model: LocalModel) {
+        guard let target = runtimeInfo[model.id]?.stopTarget else { return }
+        Task {
+            await runtime.stop(target)
+            refreshRuntime()
         }
     }
 

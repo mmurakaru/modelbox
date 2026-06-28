@@ -23,7 +23,7 @@ enum RAMFit {
 
     var label: String {
         switch self {
-        case .fits: "Runs"
+        case .fits: "Fits"
         case .tight: "Tight"
         case .tooBig: "Too big"
         }

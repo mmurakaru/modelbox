@@ -16,6 +16,7 @@ struct OverviewView: View {
                 list
             }
         }
+        .task { store.refreshRuntime() }
     }
 
     private var header: some View {
@@ -59,13 +60,25 @@ struct OverviewView: View {
                         model: model,
                         ramFactor: ramEstimateFactor,
                         copies: store.copyCount(for: model),
+                        isWarm: store.isWarm(model),
+                        stopPrompt: stopPrompt(for: model),
                         onReveal: { reveal(model) },
-                        onDelete: { performDelete(model) }
+                        onDelete: { performDelete(model) },
+                        onStop: { store.stop(model) }
                     )
                 }
             }
             .padding(.horizontal, 6)
             .padding(.vertical, 4)
+        }
+    }
+
+    /// Confirmation text for stopping a resident model, or nil when it can't be stopped cleanly.
+    private func stopPrompt(for model: LocalModel) -> String? {
+        switch store.stopTarget(for: model) {
+        case .ollama(let name): "Unload \(name) from Ollama?"
+        case .process(_, let name): "Stop the \(name) process running \(model.name)?"
+        case .none: nil
         }
     }
 
@@ -103,11 +116,15 @@ struct ModelRowView: View {
     let model: LocalModel
     let ramFactor: Double
     var copies: Int = 1
+    var isWarm: Bool = false
+    var stopPrompt: String? = nil
     var onReveal: () -> Void = {}
     var onDelete: () -> Void = {}
+    var onStop: () -> Void = {}
 
     @State private var isHovering = false
     @State private var confirmingDelete = false
+    @State private var confirmingStop = false
 
     private var estimatedRAM: Int64 {
         RAMEstimate.bytes(forModelSize: model.sizeBytes, factor: ramFactor)
@@ -129,6 +146,11 @@ struct ModelRowView: View {
                     if copies > 1 {
                         Text("\(copies) copies")
                             .foregroundStyle(.orange)
+                    }
+                    if isWarm {
+                        Text("Warm")
+                            .foregroundStyle(.orange)
+                            .help("Resident in memory, ready to respond instantly")
                     }
                 }
                 .font(.system(size: 10))
@@ -159,10 +181,28 @@ struct ModelRowView: View {
         } message: {
             Text("\(model.sizeBytes.formattedBytes) at \(model.path.path)")
         }
+        .confirmationDialog(
+            stopPrompt ?? "",
+            isPresented: $confirmingStop,
+            titleVisibility: .visible
+        ) {
+            Button("Stop", role: .destructive, action: onStop)
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Frees ~\(estimatedRAM.formattedBytes) of memory.")
+        }
     }
 
     private var actions: some View {
         HStack(spacing: 4) {
+            if stopPrompt != nil {
+                Button(action: { confirmingStop = true }) {
+                    Image(systemName: "stop.circle")
+                }
+                .buttonStyle(.borderless)
+                .help("Stop this model")
+            }
+
             Button(action: onReveal) {
                 Image(systemName: "folder")
             }
