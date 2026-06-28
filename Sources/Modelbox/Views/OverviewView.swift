@@ -1,7 +1,9 @@
 import SwiftUI
+import AppKit
 
 struct OverviewView: View {
     @Environment(ModelStore.self) private var store
+    @AppStorage("ramEstimateFactor") private var ramEstimateFactor: Double = 1.2
 
     var body: some View {
         VStack(spacing: 0) {
@@ -14,6 +16,7 @@ struct OverviewView: View {
                 list
             }
         }
+        .task { store.refreshRuntime() }
     }
 
     private var header: some View {
@@ -21,11 +24,29 @@ struct OverviewView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text("\(store.models.count) model\(store.models.count == 1 ? "" : "s")")
                     .font(.system(size: 12, weight: .semibold))
-                Text("\(store.totalBytes.formattedBytes) on disk")
-                    .font(.system(size: 10))
-                    .foregroundStyle(.secondary)
+                HStack(spacing: 6) {
+                    Text("\(store.totalBytes.formattedBytes) on disk")
+                    if store.reclaimableBytes > 0 {
+                        Text("· \(store.reclaimableBytes.formattedBytes) reclaimable")
+                            .foregroundStyle(.orange)
+                    }
+                }
+                .font(.system(size: 10))
+                .foregroundStyle(.secondary)
             }
             Spacer()
+            if !store.models.isEmpty {
+                Button(action: { store.findDuplicates() }) {
+                    if store.isDetectingDuplicates {
+                        ProgressView().controlSize(.small).scaleEffect(0.7).frame(width: 12, height: 12)
+                    } else {
+                        Label("Find duplicates", systemImage: "doc.on.doc")
+                    }
+                }
+                .buttonStyle(.borderless)
+                .font(.system(size: 10))
+                .disabled(store.isDetectingDuplicates)
+            }
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
@@ -35,11 +56,42 @@ struct OverviewView: View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 2) {
                 ForEach(store.filteredModels) { model in
-                    ModelRowView(model: model)
+                    ModelRowView(
+                        model: model,
+                        ramFactor: ramEstimateFactor,
+                        copies: store.copyCount(for: model),
+                        isWarm: store.isWarm(model),
+                        stopPrompt: stopPrompt(for: model),
+                        onReveal: { reveal(model) },
+                        onDelete: { performDelete(model) },
+                        onStop: { store.stop(model) }
+                    )
                 }
             }
             .padding(.horizontal, 6)
             .padding(.vertical, 4)
+        }
+    }
+
+    /// Confirmation text for stopping a resident model, or nil when it can't be stopped cleanly.
+    private func stopPrompt(for model: LocalModel) -> String? {
+        switch store.stopTarget(for: model) {
+        case .ollama(let name): "Unload \(name) from Ollama?"
+        case .process(_, let name): "Stop the \(name) process running \(model.name)?"
+        case .none: nil
+        }
+    }
+
+    private func reveal(_ model: LocalModel) {
+        NSWorkspace.shared.activateFileViewerSelecting([model.path])
+    }
+
+    private func performDelete(_ model: LocalModel) {
+        do {
+            try FileManager.default.trashItem(at: model.path, resultingItemURL: nil)
+            store.remove(model)
+        } catch {
+            NSSound.beep()
         }
     }
 
@@ -62,6 +114,25 @@ struct OverviewView: View {
 
 struct ModelRowView: View {
     let model: LocalModel
+    let ramFactor: Double
+    var copies: Int = 1
+    var isWarm: Bool = false
+    var stopPrompt: String? = nil
+    var onReveal: () -> Void = {}
+    var onDelete: () -> Void = {}
+    var onStop: () -> Void = {}
+
+    @State private var isHovering = false
+    @State private var confirmingDelete = false
+    @State private var confirmingStop = false
+
+    private var estimatedRAM: Int64 {
+        RAMEstimate.bytes(forModelSize: model.sizeBytes, factor: ramFactor)
+    }
+
+    private var fit: RAMFit {
+        RAMFit.evaluate(estimatedRAM: estimatedRAM, machineRAM: HardwareInfo.physicalMemoryBytes)
+    }
 
     var body: some View {
         HStack(spacing: 8) {
@@ -69,17 +140,94 @@ struct ModelRowView: View {
                 Text(model.name)
                     .font(.system(size: 12, weight: .medium))
                     .lineLimit(1)
-                Text(model.source.displayName)
-                    .font(.system(size: 10))
-                    .foregroundStyle(.secondary)
+                HStack(spacing: 6) {
+                    Text(model.source.displayName)
+                    Text("~\(estimatedRAM.formattedBytes) RAM")
+                    if copies > 1 {
+                        Text("\(copies) copies")
+                            .foregroundStyle(.orange)
+                    }
+                    if isWarm {
+                        Text("Warm")
+                            .foregroundStyle(.orange)
+                            .help("Resident in memory, ready to respond instantly")
+                    }
+                }
+                .font(.system(size: 10))
+                .foregroundStyle(.secondary)
             }
             Spacer()
-            Text(model.sizeBytes.formattedBytes)
-                .font(.system(size: 11, design: .monospaced))
-                .foregroundStyle(.secondary)
+            if isHovering {
+                actions
+            }
+            VStack(alignment: .trailing, spacing: 2) {
+                Text(model.sizeBytes.formattedBytes)
+                    .font(.system(size: 11, design: .monospaced))
+                    .foregroundStyle(.secondary)
+                fitBadge
+            }
         }
         .padding(.vertical, 5)
         .padding(.horizontal, 8)
         .contentShape(Rectangle())
+        .onHover { isHovering = $0 }
+        .confirmationDialog(
+            "Move \(model.name) to the Trash?",
+            isPresented: $confirmingDelete,
+            titleVisibility: .visible
+        ) {
+            Button("Move to Trash", role: .destructive, action: onDelete)
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("\(model.sizeBytes.formattedBytes) at \(model.path.path)")
+        }
+        .confirmationDialog(
+            stopPrompt ?? "",
+            isPresented: $confirmingStop,
+            titleVisibility: .visible
+        ) {
+            Button("Stop", role: .destructive, action: onStop)
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Frees ~\(estimatedRAM.formattedBytes) of memory.")
+        }
+    }
+
+    private var actions: some View {
+        HStack(spacing: 4) {
+            if stopPrompt != nil {
+                Button(action: { confirmingStop = true }) {
+                    Image(systemName: "stop.circle")
+                }
+                .buttonStyle(.borderless)
+                .help("Stop this model")
+            }
+
+            Button(action: onReveal) {
+                Image(systemName: "folder")
+            }
+            .buttonStyle(.borderless)
+            .help("Reveal in Finder")
+
+            if ModelDeletion.canTrash(model) {
+                Button(action: { confirmingDelete = true }) {
+                    Image(systemName: "trash")
+                }
+                .buttonStyle(.borderless)
+                .help("Move to Trash")
+            }
+        }
+        .font(.system(size: 11))
+        .foregroundStyle(.secondary)
+    }
+
+    private var fitBadge: some View {
+        HStack(spacing: 3) {
+            Image(systemName: fit.systemImage)
+            Text(fit.label)
+        }
+        .font(.system(size: 9, weight: .medium))
+        .foregroundStyle(fit.tint)
+        .help("Estimated \(estimatedRAM.formattedBytes) vs \(HardwareInfo.physicalMemoryBytes.formattedBytes) of RAM")
     }
 }
