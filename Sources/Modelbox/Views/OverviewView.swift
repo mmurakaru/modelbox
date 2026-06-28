@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 struct OverviewView: View {
     @Environment(ModelStore.self) private var store
@@ -54,11 +55,30 @@ struct OverviewView: View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 2) {
                 ForEach(store.filteredModels) { model in
-                    ModelRowView(model: model, ramFactor: ramEstimateFactor, copies: store.copyCount(for: model))
+                    ModelRowView(
+                        model: model,
+                        ramFactor: ramEstimateFactor,
+                        copies: store.copyCount(for: model),
+                        onReveal: { reveal(model) },
+                        onDelete: { performDelete(model) }
+                    )
                 }
             }
             .padding(.horizontal, 6)
             .padding(.vertical, 4)
+        }
+    }
+
+    private func reveal(_ model: LocalModel) {
+        NSWorkspace.shared.activateFileViewerSelecting([model.path])
+    }
+
+    private func performDelete(_ model: LocalModel) {
+        do {
+            try FileManager.default.trashItem(at: model.path, resultingItemURL: nil)
+            store.remove(model)
+        } catch {
+            NSSound.beep()
         }
     }
 
@@ -83,6 +103,11 @@ struct ModelRowView: View {
     let model: LocalModel
     let ramFactor: Double
     var copies: Int = 1
+    var onReveal: () -> Void = {}
+    var onDelete: () -> Void = {}
+
+    @State private var isHovering = false
+    @State private var confirmingDelete = false
 
     private var estimatedRAM: Int64 {
         RAMEstimate.bytes(forModelSize: model.sizeBytes, factor: ramFactor)
@@ -110,6 +135,9 @@ struct ModelRowView: View {
                 .foregroundStyle(.secondary)
             }
             Spacer()
+            if isHovering {
+                actions
+            }
             VStack(alignment: .trailing, spacing: 2) {
                 Text(model.sizeBytes.formattedBytes)
                     .font(.system(size: 11, design: .monospaced))
@@ -120,6 +148,37 @@ struct ModelRowView: View {
         .padding(.vertical, 5)
         .padding(.horizontal, 8)
         .contentShape(Rectangle())
+        .onHover { isHovering = $0 }
+        .confirmationDialog(
+            "Move \(model.name) to the Trash?",
+            isPresented: $confirmingDelete,
+            titleVisibility: .visible
+        ) {
+            Button("Move to Trash", role: .destructive, action: onDelete)
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("\(model.sizeBytes.formattedBytes) at \(model.path.path)")
+        }
+    }
+
+    private var actions: some View {
+        HStack(spacing: 4) {
+            Button(action: onReveal) {
+                Image(systemName: "folder")
+            }
+            .buttonStyle(.borderless)
+            .help("Reveal in Finder")
+
+            if ModelDeletion.canTrash(model) {
+                Button(action: { confirmingDelete = true }) {
+                    Image(systemName: "trash")
+                }
+                .buttonStyle(.borderless)
+                .help("Move to Trash")
+            }
+        }
+        .font(.system(size: 11))
+        .foregroundStyle(.secondary)
     }
 
     private var fitBadge: some View {
