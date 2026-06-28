@@ -8,12 +8,20 @@ final class ModelStore {
     private(set) var models: [LocalModel] = []
     private(set) var lastScan: Date?
     private(set) var isScanning = false
+    private(set) var duplicateGroups: [DuplicateGroup] = []
+    private(set) var isDetectingDuplicates = false
 
     var searchQuery: String = ""
 
     private var scanners: [any ModelScanner] = []
     private var watchers: [DirectoryWatcher] = []
+    private let dedup = DedupDetector()
     private var didStart = false
+
+    /// Total space freeable by removing all-but-one of each duplicate group.
+    var reclaimableBytes: Int64 {
+        duplicateGroups.reduce(0) { $0 + $1.reclaimableBytes }
+    }
 
     var filteredModels: [LocalModel] {
         let query = searchQuery.trimmingCharacters(in: .whitespaces).lowercased()
@@ -46,8 +54,28 @@ final class ModelStore {
                 self?.models = found
                 self?.lastScan = Date()
                 self?.isScanning = false
+                self?.duplicateGroups = []  // stale once the inventory changes
             }
         }
+    }
+
+    /// Detects byte-identical models off the main thread. Not run on routine refreshes.
+    func findDuplicates() {
+        guard !isDetectingDuplicates else { return }
+        isDetectingDuplicates = true
+        let snapshot = models
+        Task {
+            let groups = await dedup.findDuplicates(in: snapshot)
+            duplicateGroups = groups
+            isDetectingDuplicates = false
+        }
+    }
+
+    /// How many copies the given model has (1 = unique / not yet detected).
+    func copyCount(for model: LocalModel) -> Int {
+        duplicateGroups.first { group in
+            group.models.contains { $0.id == model.id }
+        }?.models.count ?? 1
     }
 
     /// Runs every scanner, dedupes by id, and sorts largest-first. Pure, off-main-thread safe.

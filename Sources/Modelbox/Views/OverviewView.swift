@@ -22,14 +22,29 @@ struct OverviewView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text("\(store.models.count) model\(store.models.count == 1 ? "" : "s")")
                     .font(.system(size: 12, weight: .semibold))
-                Text("\(store.totalBytes.formattedBytes) on disk")
-                    .font(.system(size: 10))
-                    .foregroundStyle(.secondary)
+                HStack(spacing: 6) {
+                    Text("\(store.totalBytes.formattedBytes) on disk")
+                    if store.reclaimableBytes > 0 {
+                        Text("· \(store.reclaimableBytes.formattedBytes) reclaimable")
+                            .foregroundStyle(.orange)
+                    }
+                }
+                .font(.system(size: 10))
+                .foregroundStyle(.secondary)
             }
             Spacer()
-            Text("Mac: \(HardwareInfo.physicalMemoryBytes.formattedBytes) RAM")
+            if !store.models.isEmpty {
+                Button(action: { store.findDuplicates() }) {
+                    if store.isDetectingDuplicates {
+                        ProgressView().controlSize(.small).scaleEffect(0.7).frame(width: 12, height: 12)
+                    } else {
+                        Label("Find duplicates", systemImage: "doc.on.doc")
+                    }
+                }
+                .buttonStyle(.borderless)
                 .font(.system(size: 10))
-                .foregroundStyle(.tertiary)
+                .disabled(store.isDetectingDuplicates)
+            }
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
@@ -39,7 +54,7 @@ struct OverviewView: View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 2) {
                 ForEach(store.filteredModels) { model in
-                    ModelRowView(model: model, ramFactor: ramEstimateFactor)
+                    ModelRowView(model: model, ramFactor: ramEstimateFactor, copies: store.copyCount(for: model))
                 }
             }
             .padding(.horizontal, 6)
@@ -67,6 +82,7 @@ struct OverviewView: View {
 struct ModelRowView: View {
     let model: LocalModel
     let ramFactor: Double
+    var copies: Int = 1
 
     private var estimatedRAM: Int64 {
         RAMEstimate.bytes(forModelSize: model.sizeBytes, factor: ramFactor)
@@ -85,6 +101,10 @@ struct ModelRowView: View {
                 HStack(spacing: 6) {
                     Text(model.source.displayName)
                     Text("~\(estimatedRAM.formattedBytes) RAM")
+                    if copies > 1 {
+                        Text("\(copies) copies")
+                            .foregroundStyle(.orange)
+                    }
                 }
                 .font(.system(size: 10))
                 .foregroundStyle(.secondary)
