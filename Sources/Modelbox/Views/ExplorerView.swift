@@ -1,11 +1,15 @@
 import SwiftUI
+import AppKit
 
 struct ExplorerView: View {
+    @Environment(ModelStore.self) private var store
     @AppStorage("huggingFaceToken") private var token: String = ""
     @State private var model = ExplorerModel()
     @FocusState private var searchFocused: Bool
 
     private var tokenOrNil: String? { token.isEmpty ? nil : token }
+
+    private var localNames: [String] { store.models.map(\.name) }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -105,7 +109,10 @@ struct ExplorerView: View {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 2) {
                     ForEach(model.displayedResults) { hfModel in
-                        HFModelRowView(model: hfModel)
+                        HFModelRowView(
+                            model: hfModel,
+                            isInstalled: InstalledMatcher.isInstalled(hfModel, localNames: localNames)
+                        )
                     }
                 }
                 .padding(.horizontal, 6)
@@ -161,18 +168,33 @@ struct ExplorerView: View {
 
 struct HFModelRowView: View {
     let model: HFModel
+    var isInstalled: Bool = false
+
+    @State private var isHovering = false
+    @State private var didCopy = false
 
     var body: some View {
         HStack(spacing: 8) {
             VStack(alignment: .leading, spacing: 2) {
-                Text(model.name)
-                    .font(.system(size: 12, weight: .medium))
-                    .lineLimit(1)
+                HStack(spacing: 4) {
+                    Text(model.name)
+                        .font(.system(size: 12, weight: .medium))
+                        .lineLimit(1)
+                    if isInstalled {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.system(size: 9))
+                            .foregroundStyle(.green)
+                            .help("Already installed locally")
+                    }
+                }
                 Text(model.lab)
                     .font(.system(size: 10))
                     .foregroundStyle(.secondary)
             }
             Spacer()
+            if isHovering {
+                handoffActions
+            }
             VStack(alignment: .trailing, spacing: 2) {
                 if let params = model.parameterHint {
                     Text(params)
@@ -189,6 +211,37 @@ struct HFModelRowView: View {
         .padding(.vertical, 5)
         .padding(.horizontal, 8)
         .contentShape(Rectangle())
+        .onHover { isHovering = $0 }
+    }
+
+    private var handoffActions: some View {
+        HStack(spacing: 4) {
+            Button(action: copyPullCommand) {
+                Image(systemName: didCopy ? "checkmark" : "doc.on.clipboard")
+            }
+            .buttonStyle(.borderless)
+            .help("Copy: \(InstalledMatcher.pullCommand(for: model))")
+
+            Button(action: openModelPage) {
+                Image(systemName: "arrow.up.right.square")
+            }
+            .buttonStyle(.borderless)
+            .help("Open model page")
+        }
+        .font(.system(size: 11))
+        .foregroundStyle(.secondary)
+    }
+
+    private func copyPullCommand() {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(InstalledMatcher.pullCommand(for: model), forType: .string)
+        didCopy = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { didCopy = false }
+    }
+
+    private func openModelPage() {
+        guard let url = InstalledMatcher.modelPageURL(for: model) else { return }
+        NSWorkspace.shared.open(url)
     }
 }
 
