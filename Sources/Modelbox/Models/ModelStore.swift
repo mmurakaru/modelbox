@@ -11,6 +11,10 @@ final class ModelStore {
 
     var searchQuery: String = ""
 
+    private var scanners: [any ModelScanner] = []
+    private var watchers: [DirectoryWatcher] = []
+    private var didStart = false
+
     var filteredModels: [LocalModel] {
         let query = searchQuery.trimmingCharacters(in: .whitespaces).lowercased()
         guard !query.isEmpty else { return models }
@@ -24,13 +28,55 @@ final class ModelStore {
         models.reduce(0) { $0 + $1.sizeBytes }
     }
 
+    /// Configures the default scanners, starts watching their roots, and runs the first scan. Idempotent.
+    func start() {
+        guard !didStart else { return }
+        didStart = true
+        scanners = DefaultScanners.all()
+        startWatching()
+        rescan()
+    }
+
     func rescan() {
-        // Scanners land in a follow-up; for now this just records the attempt.
-        lastScan = Date()
+        let scanners = self.scanners
+        isScanning = true
+        Task.detached(priority: .utility) {
+            let found = ModelStore.aggregate(scanners)
+            await MainActor.run { [weak self] in
+                self?.models = found
+                self?.lastScan = Date()
+                self?.isScanning = false
+            }
+        }
+    }
+
+    /// Runs every scanner, dedupes by id, and sorts largest-first. Pure, off-main-thread safe.
+    nonisolated static func aggregate(_ scanners: [any ModelScanner]) -> [LocalModel] {
+        var seen = Set<String>()
+        var out: [LocalModel] = []
+        for scanner in scanners {
+            for model in scanner.scan() where seen.insert(model.id).inserted {
+                out.append(model)
+            }
+        }
+        return out.sorted { $0.sizeBytes > $1.sizeBytes }
     }
 
     func remove(_ model: LocalModel) {
         models.removeAll { $0.id == model.id }
+    }
+
+    private func startWatching() {
+        let roots = scanners
+            .compactMap { $0 as? FlatFileModelScanner }
+            .flatMap(\.roots)
+            .filter { FileManager.default.fileExists(atPath: $0.path) }
+
+        watchers = roots.compactMap { url in
+            DirectoryWatcher(url: url) { [weak self] in
+                Task { @MainActor in self?.rescan() }
+            }
+        }
     }
 
     func _seedForTesting(_ models: [LocalModel]) {

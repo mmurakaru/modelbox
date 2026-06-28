@@ -50,7 +50,7 @@ struct PopoverView: View {
         }
         .frame(width: 360, height: 520)
         .task {
-            store.rescan()
+            store.start()
         }
         .onKeyPress(.escape) {
             NSApp.deactivate()
