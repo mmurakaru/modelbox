@@ -2,6 +2,7 @@ import SwiftUI
 
 struct OverviewView: View {
     @Environment(ModelStore.self) private var store
+    @AppStorage("ramEstimateFactor") private var ramEstimateFactor: Double = 1.2
 
     var body: some View {
         VStack(spacing: 0) {
@@ -26,6 +27,9 @@ struct OverviewView: View {
                     .foregroundStyle(.secondary)
             }
             Spacer()
+            Text("Mac: \(HardwareInfo.physicalMemoryBytes.formattedBytes) RAM")
+                .font(.system(size: 10))
+                .foregroundStyle(.tertiary)
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
@@ -35,7 +39,7 @@ struct OverviewView: View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 2) {
                 ForEach(store.filteredModels) { model in
-                    ModelRowView(model: model)
+                    ModelRowView(model: model, ramFactor: ramEstimateFactor)
                 }
             }
             .padding(.horizontal, 6)
@@ -62,6 +66,15 @@ struct OverviewView: View {
 
 struct ModelRowView: View {
     let model: LocalModel
+    let ramFactor: Double
+
+    private var estimatedRAM: Int64 {
+        RAMEstimate.bytes(forModelSize: model.sizeBytes, factor: ramFactor)
+    }
+
+    private var fit: RAMFit {
+        RAMFit.evaluate(estimatedRAM: estimatedRAM, machineRAM: HardwareInfo.physicalMemoryBytes)
+    }
 
     var body: some View {
         HStack(spacing: 8) {
@@ -69,17 +82,33 @@ struct ModelRowView: View {
                 Text(model.name)
                     .font(.system(size: 12, weight: .medium))
                     .lineLimit(1)
-                Text(model.source.displayName)
-                    .font(.system(size: 10))
-                    .foregroundStyle(.secondary)
+                HStack(spacing: 6) {
+                    Text(model.source.displayName)
+                    Text("~\(estimatedRAM.formattedBytes) RAM")
+                }
+                .font(.system(size: 10))
+                .foregroundStyle(.secondary)
             }
             Spacer()
-            Text(model.sizeBytes.formattedBytes)
-                .font(.system(size: 11, design: .monospaced))
-                .foregroundStyle(.secondary)
+            VStack(alignment: .trailing, spacing: 2) {
+                Text(model.sizeBytes.formattedBytes)
+                    .font(.system(size: 11, design: .monospaced))
+                    .foregroundStyle(.secondary)
+                fitBadge
+            }
         }
         .padding(.vertical, 5)
         .padding(.horizontal, 8)
         .contentShape(Rectangle())
+    }
+
+    private var fitBadge: some View {
+        HStack(spacing: 3) {
+            Image(systemName: fit.systemImage)
+            Text(fit.label)
+        }
+        .font(.system(size: 9, weight: .medium))
+        .foregroundStyle(fit.tint)
+        .help("Estimated \(estimatedRAM.formattedBytes) vs \(HardwareInfo.physicalMemoryBytes.formattedBytes) of RAM")
     }
 }
