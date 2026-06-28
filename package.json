@@ -5,7 +5,7 @@
   "description": "Versioning and changelog tooling for the modelbox macOS app via @changesets/cli; nothing is published to npm.",
   "scripts": {
     "changeset": "changeset",
-    "version-bump": "changeset version"
+    "version-bump": "changeset version && node scripts/sync-version.mjs"
   },
   "devDependencies": {
     "@changesets/cli": "^2.27.0"
