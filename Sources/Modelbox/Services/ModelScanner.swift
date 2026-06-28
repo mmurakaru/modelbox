@@ -52,23 +52,37 @@ struct FlatFileModelScanner: ModelScanner {
     }
 }
 
-/// Builds the default scanner set for the known flat-file sources.
-/// Source toggles and custom paths from Settings are wired in a later slice.
+/// Builds the scanner set enabled by a `ScanConfiguration`.
 enum DefaultScanners {
-    static func all() -> [any ModelScanner] {
-        let home = FileManager.default.homeDirectoryForCurrentUser
-        return [
-            OllamaScanner(root: home.appending(path: ".ollama/models")),
-            HuggingFaceCacheScanner(root: HuggingFaceCacheScanner.defaultRoot(home: home)),
-            FlatFileModelScanner(source: .openWhispr, roots: [
+    static func scanners(
+        for configuration: ScanConfiguration,
+        home: URL = FileManager.default.homeDirectoryForCurrentUser
+    ) -> [any ModelScanner] {
+        var scanners: [any ModelScanner] = []
+        if configuration.ollama {
+            scanners.append(OllamaScanner(root: home.appending(path: ".ollama/models")))
+        }
+        if configuration.huggingFace {
+            scanners.append(HuggingFaceCacheScanner(root: HuggingFaceCacheScanner.defaultRoot(home: home)))
+        }
+        if configuration.openWhispr {
+            scanners.append(FlatFileModelScanner(source: .openWhispr, roots: [
                 home.appending(path: ".cache/openwhispr/models"),
-            ]),
-            FlatFileModelScanner(source: .lmStudio, roots: [
+            ]))
+        }
+        if configuration.lmStudio {
+            scanners.append(FlatFileModelScanner(source: .lmStudio, roots: [
                 home.appending(path: ".lmstudio/models"),
                 home.appending(path: ".cache/lm-studio"),
-            ]),
-            FlatFileModelScanner(source: .appSupport, roots: appSupportModelRoots()),
-        ]
+            ]))
+        }
+        if configuration.appSupport {
+            scanners.append(FlatFileModelScanner(source: .appSupport, roots: appSupportModelRoots()))
+        }
+        if !configuration.customPaths.isEmpty {
+            scanners.append(FlatFileModelScanner(source: .custom, roots: configuration.customPaths))
+        }
+        return scanners
     }
 
     /// `~/Library/Application Support/<app>/models` directories that exist.

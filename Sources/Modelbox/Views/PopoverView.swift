@@ -21,8 +21,26 @@ struct PopoverView: View {
 
     @AppStorage("activeTab") private var activeTabRaw: String = AppTab.overview.rawValue
 
+    @AppStorage("scanOllama") private var scanOllama: Bool = true
+    @AppStorage("scanHuggingFace") private var scanHuggingFace: Bool = true
+    @AppStorage("scanLMStudio") private var scanLMStudio: Bool = true
+    @AppStorage("scanOpenWhispr") private var scanOpenWhispr: Bool = true
+    @AppStorage("scanAppSupport") private var scanAppSupport: Bool = true
+    @AppStorage("customScanPaths") private var customScanPaths: String = ""
+
     private var activeTab: AppTab {
         AppTab(rawValue: activeTabRaw) ?? .overview
+    }
+
+    private var scanConfiguration: ScanConfiguration {
+        ScanConfiguration(
+            ollama: scanOllama,
+            huggingFace: scanHuggingFace,
+            lmStudio: scanLMStudio,
+            openWhispr: scanOpenWhispr,
+            appSupport: scanAppSupport,
+            customPaths: ScanConfiguration.parseCustomPaths(customScanPaths)
+        )
     }
 
     var body: some View {
@@ -50,7 +68,10 @@ struct PopoverView: View {
         }
         .frame(width: 360, height: 520)
         .task {
-            store.start()
+            store.start(configuration: scanConfiguration)
+        }
+        .onChange(of: scanConfiguration) { _, newConfiguration in
+            store.reconfigure(newConfiguration)
         }
         .onKeyPress(.escape) {
             NSApp.deactivate()

@@ -36,11 +36,21 @@ final class ModelStore {
         models.reduce(0) { $0 + $1.sizeBytes }
     }
 
-    /// Configures the default scanners, starts watching their roots, and runs the first scan. Idempotent.
-    func start() {
+    /// Configures scanners from the given settings, starts watching, and runs the first scan. Idempotent.
+    func start(configuration: ScanConfiguration) {
         guard !didStart else { return }
         didStart = true
-        scanners = DefaultScanners.all()
+        apply(configuration)
+    }
+
+    /// Rebuilds scanners when the scan settings change, then re-scans.
+    func reconfigure(_ configuration: ScanConfiguration) {
+        guard didStart else { return }
+        apply(configuration)
+    }
+
+    private func apply(_ configuration: ScanConfiguration) {
+        scanners = DefaultScanners.scanners(for: configuration)
         startWatching()
         rescan()
     }
