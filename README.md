@@ -1,4 +1,4 @@
-# modelbox
+# <img src="Sources/Modelbox/Resources/AppIcon.svg" alt="" height="48" valign="middle" /> modelbox
 
 Native macOS menu bar app for seeing and managing the local AI models on your Mac.
 

@@ -17,7 +17,7 @@ let package = Package(
                 .product(name: "Sparkle", package: "Sparkle"),
             ],
             path: "Sources/Modelbox",
-            exclude: ["Resources/Info.plist.template"]
+            exclude: ["Resources/Info.plist.template", "Resources/AppIcon.svg"]
         ),
         .testTarget(
             name: "ModelboxTests",
