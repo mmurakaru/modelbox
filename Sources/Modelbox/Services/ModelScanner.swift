@@ -59,6 +59,7 @@ enum DefaultScanners {
         let home = FileManager.default.homeDirectoryForCurrentUser
         return [
             OllamaScanner(root: home.appending(path: ".ollama/models")),
+            HuggingFaceCacheScanner(root: HuggingFaceCacheScanner.defaultRoot(home: home)),
             FlatFileModelScanner(source: .openWhispr, roots: [
                 home.appending(path: ".cache/openwhispr/models"),
             ]),
