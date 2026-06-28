@@ -11,6 +11,16 @@ See [docs/PRD.md](docs/PRD.md) for the full spec.
 
 Settings open from the footer as a separate window.
 
+## Install
+
+Grab the latest `Modelbox-vX.Y.Z.zip` from [Releases](https://github.com/mmurakaru/modelbox/releases), unzip, and drag `Modelbox.app` to `/Applications`.
+
+The app is ad-hoc signed, not notarized. On first launch macOS Gatekeeper will refuse to open it. Either right-click → Open and confirm, or strip the quarantine attribute:
+
+```sh
+xattr -dr com.apple.quarantine /Applications/Modelbox.app
+```
+
 ## Build & run
 
 Requires macOS 26+ and a Swift 6.2 toolchain.
