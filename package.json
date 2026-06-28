@@ -1,0 +1,13 @@
+{
+  "name": "modelbox",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Versioning and changelog tooling for the modelbox macOS app via @changesets/cli; nothing is published to npm.",
+  "scripts": {
+    "changeset": "changeset",
+    "version-bump": "changeset version"
+  },
+  "devDependencies": {
+    "@changesets/cli": "^2.27.0"
+  }
+}

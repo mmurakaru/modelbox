@@ -1,0 +1,9 @@
+.build/
+.swiftpm/
+Package.resolved
+Modelbox.app/
+Modelbox-*.zip
+DerivedData/
+*.xcodeproj
+.DS_Store
+node_modules/
