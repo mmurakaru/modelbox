@@ -14,6 +14,10 @@ struct ExplorerView: View {
                 .padding(.top, 8)
                 .padding(.bottom, 6)
 
+            filterBar
+                .padding(.horizontal, 10)
+                .padding(.bottom, 6)
+
             Divider()
 
             content
@@ -37,12 +41,12 @@ struct ExplorerView: View {
         return HStack(spacing: 6) {
             Image(systemName: "magnifyingglass")
                 .foregroundStyle(.secondary)
-            TextField("Search Hugging Face", text: $model.query)
+            TextField("Search Hugging Face", text: $model.query.search)
                 .textFieldStyle(.plain)
                 .focused($searchFocused)
-                .onSubmit { Task { await model.search(token: tokenOrNil) } }
-            if !model.query.isEmpty {
-                Button(action: { model.query = "" }) {
+                .onSubmit { runSearch() }
+            if !model.query.search.isEmpty {
+                Button(action: { model.query.search = "" }) {
                     Image(systemName: "xmark.circle.fill")
                         .foregroundStyle(.secondary)
                 }
@@ -54,18 +58,53 @@ struct ExplorerView: View {
         .glassEffect(.regular, in: .rect(cornerRadius: 6))
     }
 
+    private var filterBar: some View {
+        @Bindable var model = model
+        return HStack(spacing: 6) {
+            TextField("Lab", text: $model.query.author)
+                .textFieldStyle(.roundedBorder)
+                .frame(width: 80)
+                .onSubmit { runSearch() }
+
+            Picker("", selection: $model.query.library) {
+                Text("Any format").tag(String?.none)
+                Text("GGUF").tag(String?("gguf"))
+                Text("MLX").tag(String?("mlx"))
+            }
+            .labelsHidden()
+            .onChange(of: model.query.library) { runSearch() }
+
+            Picker("", selection: $model.sizeBucket) {
+                ForEach(SizeBucket.allCases) { Text($0.label).tag($0) }
+            }
+            .labelsHidden()
+
+            Picker("", selection: $model.query.sort) {
+                ForEach(HFSort.allCases) { Text($0.label).tag($0) }
+            }
+            .labelsHidden()
+            .onChange(of: model.query.sort) { runSearch() }
+        }
+        .font(.system(size: 10))
+        .controlSize(.small)
+    }
+
+    private func runSearch() {
+        Task { await model.search(token: tokenOrNil) }
+    }
+
     @ViewBuilder
     private var content: some View {
         if model.isLoading && model.results.isEmpty {
             ProgressView()
                 .controlSize(.small)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-        } else if model.results.isEmpty {
+        } else if model.displayedResults.isEmpty {
             emptyState
         } else {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 2) {
-                    ForEach(model.results) { hfModel in
+                    ForEach(model.displayedResults) { hfModel in
                         HFModelRowView(model: hfModel)
                     }
                 }

@@ -3,7 +3,7 @@ import XCTest
 
 private struct StubSearcher: HuggingFaceSearching {
     let result: Result<[HFModel], Error>
-    func search(query: String, token: String?) async throws -> [HFModel] {
+    func search(_ query: HFQuery, token: String?) async throws -> [HFModel] {
         try result.get()
     }
 }
@@ -58,5 +58,26 @@ final class ExplorerModelTests: XCTestCase {
 
         XCTAssertEqual(second.results.map(\.id), ["Qwen/Qwen3-8B"])
         XCTAssertNotNil(second.errorMessage)
+    }
+
+    func testSizeBucketFiltersDisplayedResults() async {
+        let model = ExplorerModel(
+            client: StubSearcher(result: .success([
+                makeModel("Qwen/Qwen3-4B"),
+                makeModel("meta/Llama-3-8B"),
+                makeModel("meta/Llama-3-70B"),
+            ])),
+            cacheURL: cacheURL
+        )
+        await model.search(token: nil)
+
+        model.sizeBucket = .any
+        XCTAssertEqual(model.displayedResults.count, 3)
+
+        model.sizeBucket = .small // <= 4B
+        XCTAssertEqual(model.displayedResults.map(\.name), ["Qwen3-4B"])
+
+        model.sizeBucket = .extraLarge // > 34B
+        XCTAssertEqual(model.displayedResults.map(\.name), ["Llama-3-70B"])
     }
 }

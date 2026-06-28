@@ -11,7 +11,13 @@ final class ExplorerModel {
     private(set) var isLoading = false
     private(set) var errorMessage: String?
 
-    var query: String = ""
+    var query = HFQuery()
+    var sizeBucket: SizeBucket = .any
+
+    /// Server results narrowed by the client-side size bucket.
+    var displayedResults: [HFModel] {
+        results.filter { sizeBucket.matches($0.parameterHint) }
+    }
 
     private let client: any HuggingFaceSearching
     private let cacheURL: URL
@@ -30,7 +36,7 @@ final class ExplorerModel {
         errorMessage = nil
         defer { isLoading = false }
         do {
-            results = try await client.search(query: query, token: token)
+            results = try await client.search(query, token: token)
             lastSynced = Date()
             saveCache()
         } catch {
