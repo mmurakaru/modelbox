@@ -96,8 +96,7 @@ final class ModelStore {
 
     private func startWatching() {
         let roots = scanners
-            .compactMap { $0 as? FlatFileModelScanner }
-            .flatMap(\.roots)
+            .flatMap(\.watchRoots)
             .filter { FileManager.default.fileExists(atPath: $0.path) }
 
         watchers = roots.compactMap { url in

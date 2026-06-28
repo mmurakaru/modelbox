@@ -3,6 +3,8 @@ import Foundation
 /// One scanner per source. Best-effort: a missing directory yields no models, never an error.
 protocol ModelScanner: Sendable {
     var source: ModelSource { get }
+    /// Directories to watch for live refresh.
+    var watchRoots: [URL] { get }
     func scan() -> [LocalModel]
 }
 
@@ -11,6 +13,8 @@ protocol ModelScanner: Sendable {
 struct FlatFileModelScanner: ModelScanner {
     let source: ModelSource
     let roots: [URL]
+
+    var watchRoots: [URL] { roots }
 
     private static let extensions: Set<String> = ["gguf", "safetensors"]
 
@@ -54,6 +58,7 @@ enum DefaultScanners {
     static func all() -> [any ModelScanner] {
         let home = FileManager.default.homeDirectoryForCurrentUser
         return [
+            OllamaScanner(root: home.appending(path: ".ollama/models")),
             FlatFileModelScanner(source: .openWhispr, roots: [
                 home.appending(path: ".cache/openwhispr/models"),
             ]),
