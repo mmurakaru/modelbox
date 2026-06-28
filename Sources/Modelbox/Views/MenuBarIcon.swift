@@ -10,8 +10,13 @@ enum MenuBarIcon {
         let side: CGFloat = 18
         let image = NSImage(size: NSSize(width: side, height: side), flipped: true) { rect in
             guard let context = NSGraphicsContext.current?.cgContext else { return false }
-            let viewBox: CGFloat = 210
+            // The mark spans ~209 units; a small `padding` insets it so it sits with a
+            // little breathing room in the menu bar (tune `padding` to taste).
+            let markExtent: CGFloat = 209.3
+            let padding: CGFloat = 16
+            let viewBox = markExtent + padding * 2
             context.scaleBy(x: rect.width / viewBox, y: rect.height / viewBox)
+            context.translateBy(x: padding, y: padding)
             context.setFillColor(NSColor.black.cgColor)
 
             let squareSize: CGFloat = 63.0782
