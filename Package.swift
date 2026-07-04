@@ -8,7 +8,7 @@ let package = Package(
         .executable(name: "Modelbox", targets: ["Modelbox"]),
     ],
     dependencies: [
-        .package(url: "https://github.com/sparkle-project/Sparkle", from: "2.6.0"),
+        .package(url: "https://github.com/sparkle-project/Sparkle", from: "2.9.4"),
     ],
     targets: [
         .executableTarget(

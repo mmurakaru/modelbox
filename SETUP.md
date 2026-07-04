@@ -9,7 +9,7 @@ Sparkle signs every released zip with an EdDSA private key. The matching public 
 Download Sparkle's tools (match the version in `.github/workflows/release.yml`):
 
 ```sh
-SPARKLE_VERSION=2.9.3
+SPARKLE_VERSION=2.9.4
 curl -sL "https://github.com/sparkle-project/Sparkle/releases/download/$SPARKLE_VERSION/Sparkle-$SPARKLE_VERSION.tar.xz" \
   | tar -xJ -C /tmp/
 ```
